@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.env
+venv/
+.env/
+.venv/
+
+# Data and Build Output
+data/
+build/
+
+# C / C++
+*.exe
+*.o
+*.obj
+*.dll
+*.so
+*.dylib
+*.out
+
+# LaTeX
+*.tex
+*.aux
+*.bbl
+*.blg
+*.brf
+*.fls
+*.fdb_latexmk
+*.idx
+*.ilg
+*.ind
+*.log
+*.out
+*.toc
+*.synctex.gz
+*.pdf
+
+# Markdown
+*.md
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.swo
