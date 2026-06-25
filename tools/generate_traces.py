@@ -323,16 +323,21 @@ TRANSITION_PAIRS: tuple[tuple[str, str], ...] = (
     ("R", "W"),
 )
 
-# 7 triples: 6 return (A->B->A) + 1 chain (A->B->C)
-
-#           and W->R->F (R erases W, reduces to pair R->F)
-TRANSITION_TRIPLES: tuple[tuple[str, str, str], ...] = (
+# 12 triples: 6 return (A->B->A) + 6 chain permutations (A->B->C)
+RETURN_TRIPLES: tuple[tuple[str, str, str], ...] = (
     # 6 return triples -- measure structural memory (R excluded: it erases all structure)
     ("S", "W", "S"), ("S", "F", "S"), ("W", "S", "W"), ("W", "F", "W"),
     ("F", "S", "F"), ("F", "W", "F"),
-    # 1 chain triple -- measure lingering effects
-    ("S", "W", "F"),
 )
+
+CHAIN_TRIPLES: tuple[tuple[str, str, str], ...] = (
+    # 6 chain triples -- all permutations of {S, W, F} measuring lingering effects
+    ("S", "W", "F"), ("S", "F", "W"),
+    ("W", "S", "F"), ("W", "F", "S"),
+    ("F", "S", "W"), ("F", "W", "S"),
+)
+
+TRANSITION_TRIPLES: tuple[tuple[str, str, str], ...] = RETURN_TRIPLES + CHAIN_TRIPLES
 
 
 def make_transition(n: int, k: int, seed: int, properties: tuple[str, ...],

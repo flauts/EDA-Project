@@ -78,8 +78,8 @@ class TraceGeneratorTests(unittest.TestCase):
     def test_transition_pair_count_is_8(self) -> None:
         self.assertEqual(len(traces.TRANSITION_PAIRS), 8)
 
-    def test_transition_triple_count_is_7(self) -> None:
-        self.assertEqual(len(traces.TRANSITION_TRIPLES), 7)
+    def test_transition_triple_count_is_12(self) -> None:
+        self.assertEqual(len(traces.TRANSITION_TRIPLES), 12)
 
     def test_transition_traces_in_suite(self) -> None:
         cases = list(traces.iter_suite(
@@ -87,8 +87,8 @@ class TraceGeneratorTests(unittest.TestCase):
             length_factor=4, phase_factor=2,
         ))
         transition_families = [c.family for c in cases if c.family.startswith("transition_")]
-        # 8 pairs + 7 triples = 15 transition traces
-        self.assertEqual(len(transition_families), 15)
+        # 8 pairs + 12 triples = 20 transition traces
+        self.assertEqual(len(transition_families), 20)
 
     def test_transition_phases_are_contiguous(self) -> None:
         for case in traces.iter_suite(

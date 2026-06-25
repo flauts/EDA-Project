@@ -198,7 +198,7 @@ def _plot_cost_bars(summary: pd.DataFrame, plots_dir: Path) -> None:
 
 
 def _plot_recovery_cost_bars(summary: pd.DataFrame, plots_dir: Path) -> None:
-    triples = summary[summary["transition_type"] == "triple"].copy()
+    triples = summary[(summary["transition_type"] == "triple") & (summary["p1"] == summary["p3"])].copy()
     if triples.empty:
         return
     triples["triple_label"] = triples["p1"] + "\u2192" + triples["p2"] + "\u2192" + triples["p3"]
@@ -206,6 +206,17 @@ def _plot_recovery_cost_bars(summary: pd.DataFrame, plots_dir: Path) -> None:
     pivot = grouped.pivot(index="triple_label", columns="tree", values="recovery_cost").sort_index()
     _plot_grouped_bars(pivot, "Recovery cost", "Recovery cost for return triples",
                        plots_dir / "recovery_cost_bars.png")
+
+
+def _plot_chain_cost_bars(summary: pd.DataFrame, plots_dir: Path) -> None:
+    triples = summary[(summary["transition_type"] == "triple") & (summary["p1"] != summary["p3"])].copy()
+    if triples.empty:
+        return
+    triples["triple_label"] = triples["p1"] + "\u2192" + triples["p2"] + "\u2192" + triples["p3"]
+    grouped = triples.groupby(["triple_label", "tree"], as_index=False)["recovery_cost"].mean()
+    pivot = grouped.pivot(index="triple_label", columns="tree", values="recovery_cost").sort_index()
+    _plot_grouped_bars(pivot, "Chain transition cost", "Transition cost for chain triples",
+                       plots_dir / "chain_cost_bars.png")
 
 
 def _plot_cost_curves(summary: pd.DataFrame, results_dir: Path,
@@ -396,6 +407,7 @@ def main(argv: list[str] | None = None) -> int:
     _plot_heatmaps(summary, plots_dir)
     _plot_cost_bars(summary, plots_dir)
     _plot_recovery_cost_bars(summary, plots_dir)
+    _plot_chain_cost_bars(summary, plots_dir)
     _plot_cost_curves(summary, results_dir, traces_dir, plots_dir)
     print(f"Plots written to {plots_dir}")
 
