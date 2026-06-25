@@ -5,6 +5,7 @@
 #define ADD_H
 
 #include <iostream>
+#include <vector>
 using namespace std;
 
 // key, value, info
@@ -174,9 +175,15 @@ class BST {
 
     void freeSubtree(BSTNode<K, V, A>* n) {
         if (!n) return;
-        freeSubtree(n->left);
-        freeSubtree(n->right);
-        delete n;
+        std::vector<BSTNode<K, V, A>*> stack;
+        stack.push_back(n);
+        while (!stack.empty()) {
+            auto* curr = stack.back();
+            stack.pop_back();
+            if (curr->left) stack.push_back(curr->left);
+            if (curr->right) stack.push_back(curr->right);
+            delete curr;
+        }
     }
 
     virtual void rotate(BSTNode<K, V, A>* node) {

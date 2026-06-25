@@ -13,10 +13,12 @@
 #include <memory>
 #include <iomanip>
 #include <functional>
+#include <set>
 
 #include "trees/splaycount.hpp"
 #include "trees/tangocount.hpp"
 #include "trees/multisplaycount.hpp"
+#include "trees/rbtreecount.hpp"
 
 namespace fs = std::filesystem;
 
@@ -226,7 +228,7 @@ struct TraceInfo {
 template <typename Tree>
 long long runTree(const std::vector<int>& accesses, int n, int m,
                   const std::vector<Phase>& phases,
-                  const std::string& csv_path) {
+                  const std::string& csv_path, bool compact = false) {
     Tree tree;
 
     // Insert keys 1..n
@@ -235,10 +237,19 @@ long long runTree(const std::vector<int>& accesses, int n, int m,
 
     tree.lock(); // freeze tree, reset operations to 0
 
+    long long cum_ops = 0;
+    if (compact) {
+        for (int i = 0; i < m; ++i) {
+            long long before = tree.operations;
+            tree.find(accesses[i]);
+            cum_ops += (tree.operations - before);
+        }
+        return cum_ops;
+    }
+
     std::ofstream csv(csv_path);
     csv << "access_index,key,phase_id,phase_name,ops,cum_ops\n";
 
-    long long cum_ops = 0;
     size_t pid = 0;
     
     for (int i = 0; i < m; ++i) {
@@ -271,11 +282,12 @@ struct Args {
     std::string out_dir = "data/results";
     std::vector<std::string> trees;
     std::string single_trace; // empty = process all
+    bool compact = false;
 };
 
 static Args parseArgs(int argc, char** argv) {
     Args a;
-    a.trees = {"splay", "tango", "multisplay"};
+    a.trees = {"splay", "tango", "multisplay", "rbtree"};
 
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
@@ -292,6 +304,8 @@ static Args parseArgs(int argc, char** argv) {
                 a.trees.push_back(name);
         } else if (arg == "--trace" && i + 1 < argc)
             a.single_trace = argv[++i];
+        else if (arg == "--compact")
+            a.compact = true;
     }
     return a;
 }
@@ -349,8 +363,21 @@ int main(int argc, char** argv) {
     // Create output directory
     fs::create_directories(args.out_dir);
 
-    // Open results manifest
-    std::ofstream results_manifest(fs::path(args.out_dir) / "results_manifest.jsonl");
+    // Load completed runs to skip duplicates
+    std::set<std::pair<std::string, std::string>> already_run;
+    fs::path res_mf_path = fs::path(args.out_dir) / "results_manifest.jsonl";
+    if (fs::exists(res_mf_path)) {
+        std::ifstream exist_mf(res_mf_path);
+        std::string line;
+        while (std::getline(exist_mf, line)) {
+            if (line.empty()) continue;
+            auto rec = JsonParser(line).parse();
+            already_run.insert({rec["trace_id"].as_string(), rec["tree"].as_string()});
+        }
+    }
+
+    // Open results manifest in append mode
+    std::ofstream results_manifest(res_mf_path, std::ios::app);
 
     int trace_count = 0;
     int csv_count = 0;
@@ -359,29 +386,43 @@ int main(int argc, char** argv) {
 
     using TreeFn = std::function<long long(const std::vector<int>&, int, int,
                                             const std::vector<Phase>&,
-                                            const std::string&)>;
+                                            const std::string&, bool)>;
     std::vector<std::pair<std::string, TreeFn>> tree_dispatch;
-    tree_dispatch.reserve(3);
+    tree_dispatch.reserve(4);
     tree_dispatch.emplace_back("splay", [](const std::vector<int>& acc, int n, int m,
                                             const std::vector<Phase>& phases,
-                                            const std::string& path) {
-        return runTree<SplayTree<int,int>>(acc, n, m, phases, path);
+                                            const std::string& path, bool cmp) {
+        return runTree<SplayTree<int,int>>(acc, n, m, phases, path, cmp);
     });
     tree_dispatch.emplace_back("tango", [](const std::vector<int>& acc, int n, int m,
                                             const std::vector<Phase>& phases,
-                                            const std::string& path) {
-        return runTree<TangoTree<int,int>>(acc, n, m, phases, path);
+                                            const std::string& path, bool cmp) {
+        return runTree<TangoTree<int,int>>(acc, n, m, phases, path, cmp);
     });
     tree_dispatch.emplace_back("multisplay", [](const std::vector<int>& acc, int n, int m,
                                                   const std::vector<Phase>& phases,
-                                                  const std::string& path) {
-        return runTree<MultiSplayTree<int,int>>(acc, n, m, phases, path);
+                                                  const std::string& path, bool cmp) {
+        return runTree<MultiSplayTree<int,int>>(acc, n, m, phases, path, cmp);
+    });
+    tree_dispatch.emplace_back("rbtree", [](const std::vector<int>& acc, int n, int m,
+                                            const std::vector<Phase>& phases,
+                                            const std::string& path, bool cmp) {
+        return runTree<RedBlackTree<int,int>>(acc, n, m, phases, path, cmp);
     });
 
     size_t total_tasks = traces.size() * args.trees.size();
     size_t current_task = 0;
 
     for (const auto& ti : traces) {
+        // Check if all requested trees are already run
+        bool all_run = true;
+        for (const auto& [tname, fn] : tree_dispatch) {
+            if (std::find(args.trees.begin(), args.trees.end(), tname) != args.trees.end()) {
+                if (!already_run.count({ti.trace_id, tname})) { all_run = false; break; }
+            }
+        }
+        if (all_run) continue;
+
         // Read trace file
         fs::path trace_file = fs::path(args.traces_dir) / ti.trace_id / "trace.txt";
         std::ifstream tf(trace_file);
@@ -437,6 +478,8 @@ int main(int argc, char** argv) {
         for (const auto& [tname, fn] : tree_dispatch) {
             if (std::find(args.trees.begin(), args.trees.end(), tname) == args.trees.end())
                 continue;
+            if (already_run.count({ti.trace_id, tname}))
+                continue;
 
             ++current_task;
             int pct = (current_task * 100) / (total_tasks > 0 ? total_tasks : 1);
@@ -446,17 +489,19 @@ int main(int argc, char** argv) {
             std::string csv_path = (trace_out_dir / (tname + ".csv")).string();
 
             // Run tree: write per-access CSV, get total operations
-            long long ops_total = fn(accesses, ti.n, ti.m, phases, csv_path);
+            long long ops_total = fn(accesses, ti.n, ti.m, phases, csv_path, args.compact);
 
             double ratio = (ib1 > 0) ? (static_cast<double>(ops_total) / ib1) : 0.0;
             double avg   = (ti.m > 0) ? (static_cast<double>(ops_total) / ti.m) : 0.0;
 
-            // Append #AGG line to CSV (2 decimal places for doubles)
-            std::ofstream csv_app(csv_path, std::ios::app);
-            csv_app << "#AGG," << tname << ',' << ti.trace_id << ','
-                    << ti.n << ',' << ti.m << ','
-                    << ops_total << ',' << ib1 << ','
-                    << fmtDouble2(ratio) << ',' << fmtDouble2(avg) << '\n';
+            if (!args.compact) {
+                // Append #AGG line to CSV (2 decimal places for doubles)
+                std::ofstream csv_app(csv_path, std::ios::app);
+                csv_app << "#AGG," << tname << ',' << ti.trace_id << ','
+                        << ti.n << ',' << ti.m << ','
+                        << ops_total << ',' << ib1 << ','
+                        << fmtDouble2(ratio) << ',' << fmtDouble2(avg) << '\n';
+            }
 
             // Write to results manifest (JSON numbers with 2 decimal places)
             results_manifest << "{\"trace_id\":\"" << ti.trace_id

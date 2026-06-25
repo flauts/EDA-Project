@@ -5,6 +5,7 @@
 #include "trees/splaycount.hpp"
 #include "trees/tangocount.hpp"
 #include "trees/multisplaycount.hpp"
+#include "trees/rbtreecount.hpp"
 
 using namespace std;
 
@@ -51,6 +52,17 @@ void test_search_consistency() {
     // MultiSplayTree
     {
         MultiSplayTree<int, int> tree;
+        for (int k = 1; k <= N; ++k) tree.insert(k, k);
+        tree.lock();
+        for (int k = 1; k <= N; ++k) {
+            auto* node = tree.find(k);
+            assert(node->key == k);
+        }
+    }
+
+    // RedBlackTree
+    {
+        RedBlackTree<int, int> tree;
         for (int k = 1; k <= N; ++k) tree.insert(k, k);
         tree.lock();
         for (int k = 1; k <= N; ++k) {
