@@ -272,28 +272,6 @@ def make_spatial_locality(
 
 
 
-def make_ycsb_zipfian(n: int, theta: float, seed: int, m: int = 100000) -> TraceCase:
-    rng = np.random.default_rng(seed)
-    if theta == 0.0:
-        p = np.ones(n) / n
-    else:
-        w = 1.0 / np.power(np.arange(1, n + 1, dtype=np.float64), theta)
-        p = w / np.sum(w)
-    ranks = rng.choice(n, size=m, p=p)
-    perm = rng.permutation(n) + 1  # keys 1..n
-    accesses = perm[ranks].tolist()
-    trace_id = f"ycsb_zipfian_n{n}_theta{theta:.2f}_seed{seed}"
-    return TraceCase(
-        trace_id=trace_id,
-        family="ycsb_zipfian",
-        n=n,
-        seed=seed,
-        accesses=accesses,
-        parameters={"theta": theta, "m": m},
-        phases=[],
-    )
-
-
 def make_working_set(n: int, k: int, seed: int, m: int = 100000) -> TraceCase:
     rng = random.Random(seed)
     k = _bounded_k(n, k)

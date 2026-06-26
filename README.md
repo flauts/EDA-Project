@@ -7,14 +7,13 @@ Framework de evaluacion para comparar el comportamiento dinamico de Splay Trees,
 - **Tango Trees** -- O(log log n)-competitivos vs la cota IB-1
 - **Multi-Splay Trees** -- referencia adicional del paper
 
-## Cuatro Pistas Experimentales
+## Tres Pistas Experimentales
 
 | Pista | Proposito | Generador |
 |-------|-----------|-----------|
 | **State Transitions** (core) | Costo de adaptacion bajo cambios de patron | `generate_traces.py` |
 | **Paper Replication** (minimal) | Validacion contra paper de referencia | `generate_paper_traces.py` + `plot_paper_comparisons.py` |
-| **Superiority Frontier** | Donde arboles autoajustables superan a estaticos | `generate_superiority_traces.py` |
-| **YCSB Cloud** | Cargas realistas estilo cloud (Zipfian) | `generate_zipfian_traces.py` |
+| **Real-World Workloads** | Validacion con trazas reales no estacionarias | `convert_nasa_logs.py` + `analyze_real_world.py` |
 
 Ver [`SCOPE.md`](SCOPE.md) para detalles de cada pista.
 
@@ -59,15 +58,16 @@ Para el experimento formal con n grande, usa `--suite full` en el paso 1.
 python tools/generate_paper_traces.py
 python tools/plot_paper_comparisons.py
 
-# Superiority frontier (comparacion vs arboles estaticos)
-python tools/generate_superiority_traces.py
-
-# YCSB cloud workloads
-python tools/generate_zipfian_traces.py
+# Real-world workloads (NASA HTTP logs)
+# 1. Download logs manually from ftp://ita.ee.lbl.gov/traces/
+# 2. Convert and analyze
+python tools/convert_nasa_logs.py --log-dir <download_dir> --out-dir data/traces
+.\build\benchmark.exe --traces data/traces/real_world --out data/results --trees splay,tango,multisplay
+python tools/analyze_real_world.py --results data/results --out data/analysis
 ```
 
 ## Recursos
 
-- **Diseno:** [`SCOPE.md`](SCOPE.md) con las cuatro pistas experimentales
+- **Diseno:** [`SCOPE.md`](SCOPE.md) con las tres pistas experimentales
 - **Implementacion:** arboles vendoreados de [`adhami3310/tango`](https://github.com/adhami3310/tango) (MIT)
 - **Referencia:** Al-Adhami & Chheda, "Theoretical insights and an experimental comparison of tango trees and multi-splay trees," arXiv:2405.18825, 2024
