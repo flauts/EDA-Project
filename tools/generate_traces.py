@@ -15,6 +15,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterator, Sequence
 
+import numpy as np
 from tqdm import tqdm
 
 
@@ -271,6 +272,45 @@ def make_spatial_locality(
 
 
 
+def make_ycsb_zipfian(n: int, theta: float, seed: int, m: int = 100000) -> TraceCase:
+    rng = np.random.default_rng(seed)
+    if theta == 0.0:
+        p = np.ones(n) / n
+    else:
+        w = 1.0 / np.power(np.arange(1, n + 1, dtype=np.float64), theta)
+        p = w / np.sum(w)
+    ranks = rng.choice(n, size=m, p=p)
+    perm = rng.permutation(n) + 1  # keys 1..n
+    accesses = perm[ranks].tolist()
+    trace_id = f"ycsb_zipfian_n{n}_theta{theta:.2f}_seed{seed}"
+    return TraceCase(
+        trace_id=trace_id,
+        family="ycsb_zipfian",
+        n=n,
+        seed=seed,
+        accesses=accesses,
+        parameters={"theta": theta, "m": m},
+        phases=[],
+    )
+
+
+def make_working_set(n: int, k: int, seed: int, m: int = 100000) -> TraceCase:
+    rng = random.Random(seed)
+    k = _bounded_k(n, k)
+    active_set = _sample_active_set(rng, n, k)
+    accesses = _sample_from_keys(rng, active_set, m)
+    trace_id = f"working_set_n{n}_k{k}_seed{seed}"
+    return TraceCase(
+        trace_id=trace_id,
+        family="working_set",
+        n=n,
+        seed=seed,
+        accesses=accesses,
+        parameters={"k": k, "m": m},
+        phases=[],
+    )
+
+
 def make_unified(n: int, k: int, seed: int, passes: int = 100) -> TraceCase:
 
     if n < 2 * k:
@@ -390,16 +430,17 @@ def validate_trace(case: TraceCase) -> None:
     if invalid:
         raise ValueError(f"{case.trace_id}: access key outside [1, {case.n}]: {invalid[0]}")
 
-    cursor = 0
-    for phase in case.phases:
-        if phase.start != cursor:
-            raise ValueError(f"{case.trace_id}: non-contiguous phase start at {phase.name}")
-        if phase.end <= phase.start:
-            raise ValueError(f"{case.trace_id}: empty phase {phase.name}")
-        cursor = phase.end
+    if case.phases:
+        cursor = 0
+        for phase in case.phases:
+            if phase.start != cursor:
+                raise ValueError(f"{case.trace_id}: non-contiguous phase start at {phase.name}")
+            if phase.end <= phase.start:
+                raise ValueError(f"{case.trace_id}: empty phase {phase.name}")
+            cursor = phase.end
 
-    if cursor != case.m:
-        raise ValueError(f"{case.trace_id}: phases end at {cursor}, trace length is {case.m}")
+        if cursor != case.m:
+            raise ValueError(f"{case.trace_id}: phases end at {cursor}, trace length is {case.m}")
 
 
 def iter_suite(
@@ -449,13 +490,23 @@ def iter_suite(
 
 
 
-def write_trace(case: TraceCase, out_dir: Path) -> dict:
+def write_trace(case: TraceCase, base_dir: Path = Path("data/traces"), category: str = None) -> dict:
     validate_trace(case)
-    trace_dir = out_dir / case.trace_id
-    trace_dir.mkdir(parents=True, exist_ok=True)
+    if category is not None:
+        out_dir = base_dir / category / case.trace_id
+        entry_trace_id = f"{category}/{case.trace_id}"
+        rel_prefix = f"{category}/{case.trace_id}"
+        entry_path = f"{base_dir}/{category}/{case.trace_id}/trace.txt".replace("\\", "/")
+    else:
+        out_dir = base_dir / case.trace_id
+        entry_trace_id = case.trace_id
+        rel_prefix = case.trace_id
+        entry_path = f"{base_dir}/{case.trace_id}/trace.txt".replace("\\", "/")
 
-    trace_path = trace_dir / "trace.txt"
-    metadata_path = trace_dir / "trace.json"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    trace_path = out_dir / "trace.txt"
+    metadata_path = out_dir / "trace.json"
 
     with trace_path.open("w", encoding="utf-8", newline="\n") as handle:
         for key in case.accesses:
@@ -467,15 +518,16 @@ def write_trace(case: TraceCase, out_dir: Path) -> dict:
         handle.write("\n")
 
     return {
-        "trace_id": case.trace_id,
+        "trace_id": entry_trace_id,
         "family": case.family,
         "n": case.n,
         "m": case.m,
         "seed": case.seed,
         "parameters": case.parameters,
         "phase_count": len(case.phases),
-        "trace_path": str(trace_path.relative_to(out_dir).as_posix()),
-        "metadata_path": str(metadata_path.relative_to(out_dir).as_posix()),
+        "trace_path": f"{rel_prefix}/trace.txt",
+        "metadata_path": f"{rel_prefix}/trace.json",
+        "path": entry_path,
     }
 
 

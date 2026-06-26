@@ -404,11 +404,13 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Wrote {len(summary)} rows to {csv_out}")
 
     print("Generating plots …")
-    _plot_heatmaps(summary, plots_dir)
-    _plot_cost_bars(summary, plots_dir)
-    _plot_recovery_cost_bars(summary, plots_dir)
-    _plot_chain_cost_bars(summary, plots_dir)
-    _plot_cost_curves(summary, results_dir, traces_dir, plots_dir)
+    trans_plots_dir = plots_dir / "state_transitions"
+    trans_plots_dir.mkdir(parents=True, exist_ok=True)
+    _plot_heatmaps(summary, trans_plots_dir)
+    _plot_cost_bars(summary, trans_plots_dir)
+    _plot_recovery_cost_bars(summary, trans_plots_dir)
+    _plot_chain_cost_bars(summary, trans_plots_dir)
+    _plot_cost_curves(summary, results_dir, traces_dir, trans_plots_dir)
     print(f"Plots written to {plots_dir}")
 
     _write_readme(out_dir)

@@ -48,9 +48,10 @@ def generate_paper_traces(out_dir: Path = Path("data/traces"), seed: int = 2026)
 
     new_count = 0
     for case in tqdm(cases, desc="Generating Paper Workloads", unit="trace"):
-        if case.trace_id not in existing_records:
-            record = write_trace(case, out_dir)
-            existing_records[case.trace_id] = record
+        full_tid = f"paper_replication/{case.trace_id}"
+        if full_tid not in existing_records and case.trace_id not in existing_records:
+            record = write_trace(case, out_dir, category="paper_replication")
+            existing_records[record["trace_id"]] = record
             new_count += 1
 
     with manifest_path.open("w", encoding="utf-8", newline="\n") as f:
