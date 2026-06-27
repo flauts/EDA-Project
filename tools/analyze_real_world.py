@@ -28,13 +28,22 @@ def _load_manifest(results_dir: Path) -> pd.DataFrame:
             for line in f:
                 if line.strip():
                     d = json.loads(line.strip())
-                    if d.get("family", "").startswith("nasa_http"):
+                    if d.get("family", "").startswith("nasa_http") or d.get("trace_id", "").startswith("nasa_http"):
+                        cp = Path(d["csv_path"])
+                        if not cp.is_absolute():
+                            d["csv_path"] = str(results_dir / cp)
                         records.append(d)
     return pd.DataFrame(records)
 
 
+_csv_cache = {}
+
+
 def _read_csv(csv_path: Path) -> pd.DataFrame:
-    return pd.read_csv(csv_path, comment="#", engine="python")
+    key = str(csv_path)
+    if key not in _csv_cache:
+        _csv_cache[key] = pd.read_csv(csv_path, comment="#", engine="c")
+    return _csv_cache[key]
 
 
 def plot_cost_curves(manifest: pd.DataFrame, out_dir: Path):
@@ -153,7 +162,12 @@ def main():
     p.add_argument("--out", type=Path, default=Path("data/analysis"))
     args = p.parse_args()
 
-    out_dir = args.out / "plots" / "real_world"
+    base_out = args.out
+    if base_out.name in ("real_world", "plots"):
+        root_out = base_out.parent
+    else:
+        root_out = base_out
+    out_dir = root_out / "plots" / "real_world"
     out_dir.mkdir(parents=True, exist_ok=True)
 
     manifest = _load_manifest(args.results)

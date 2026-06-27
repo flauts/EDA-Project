@@ -172,37 +172,23 @@ struct Phase {
 // Wilber-1 Interleave Bound (IB-1)
 // ==============================================================
 
-#include <memory>
-
-struct RefNode {
-    int key;
-    std::unique_ptr<RefNode> left;
-    std::unique_ptr<RefNode> right;
-    int preferred; // -1 = none, 0 = left, 1 = right
-    RefNode(int k) : key(k), left(nullptr), right(nullptr), preferred(-1) {}
-};
-
-static std::unique_ptr<RefNode> buildRefTree(int lo, int hi) {
-    if (lo > hi) return nullptr;
-    int mid = (lo + hi) / 2;
-    auto n = std::make_unique<RefNode>(mid);
-    n->left = buildRefTree(lo, mid - 1);
-    n->right = buildRefTree(mid + 1, hi);
-    return n;
-}
+#include <cstdint>
 
 static int computeInterleaveBound(int n, const std::vector<int>& accesses) {
-    auto root = buildRefTree(1, n);
+    std::vector<int8_t> preferred(n + 1, -1);
     int count = 0;
     for (int x : accesses) {
-        auto* v = root.get();
-        while (v && v->key != x) {
-            int np = (x < v->key) ? 0 : 1;
-            if (v->preferred != np) {
+        int lo = 1, hi = n;
+        while (lo <= hi) {
+            int mid = (lo + hi) / 2;
+            if (x == mid) break;
+            int8_t np = (x < mid) ? 0 : 1;
+            if (preferred[mid] != np) {
                 ++count;
-                v->preferred = np;
+                preferred[mid] = np;
             }
-            v = (x < v->key) ? v->left.get() : v->right.get();
+            if (x < mid) hi = mid - 1;
+            else lo = mid + 1;
         }
     }
     return count;
@@ -283,6 +269,7 @@ struct Args {
     std::vector<std::string> trees;
     std::string single_trace; // empty = process all
     bool compact = false;
+    std::string manifest_suffix;
 };
 
 static Args parseArgs(int argc, char** argv) {
@@ -306,6 +293,8 @@ static Args parseArgs(int argc, char** argv) {
             a.single_trace = argv[++i];
         else if (arg == "--compact")
             a.compact = true;
+        else if (arg == "--manifest-suffix" && i + 1 < argc)
+            a.manifest_suffix = argv[++i];
     }
     return a;
 }
@@ -363,21 +352,33 @@ int main(int argc, char** argv) {
     // Create output directory
     fs::create_directories(args.out_dir);
 
+    std::string target_mf_name = args.manifest_suffix.empty()
+        ? "results_manifest.jsonl"
+        : "results_manifest" + args.manifest_suffix + ".jsonl";
+    fs::path target_mf_path = fs::path(args.out_dir) / target_mf_name;
+
     // Load completed runs to skip duplicates
     std::set<std::pair<std::string, std::string>> already_run;
-    fs::path res_mf_path = fs::path(args.out_dir) / "results_manifest.jsonl";
-    if (fs::exists(res_mf_path)) {
-        std::ifstream exist_mf(res_mf_path);
-        std::string line;
-        while (std::getline(exist_mf, line)) {
-            if (line.empty()) continue;
-            auto rec = JsonParser(line).parse();
-            already_run.insert({rec["trace_id"].as_string(), rec["tree"].as_string()});
+    auto load_manifest = [&](const fs::path& p) {
+        if (fs::exists(p)) {
+            std::ifstream exist_mf(p);
+            std::string line;
+            while (std::getline(exist_mf, line)) {
+                if (line.empty()) continue;
+                auto rec = JsonParser(line).parse();
+                already_run.insert({rec["trace_id"].as_string(), rec["tree"].as_string()});
+            }
         }
+    };
+
+    fs::path main_mf_path = fs::path(args.out_dir) / "results_manifest.jsonl";
+    load_manifest(main_mf_path);
+    if (!args.manifest_suffix.empty()) {
+        load_manifest(target_mf_path);
     }
 
     // Open results manifest in append mode
-    std::ofstream results_manifest(res_mf_path, std::ios::app);
+    std::ofstream results_manifest(target_mf_path, std::ios::app);
 
     int trace_count = 0;
     int csv_count = 0;

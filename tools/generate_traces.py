@@ -9,6 +9,7 @@ boundaries needed by later benchmark and analysis modules.
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ProcessPoolExecutor, as_completed
 import json
 import random
 from dataclasses import dataclass
@@ -531,14 +532,23 @@ def write_suite(
     num_transitions = len(TRANSITION_PAIRS) + len(TRANSITION_TRIPLES)
     total_traces = len(actual_n) * (1 + seed_count * (1 + len(actual_k) * (2 + num_transitions)))
 
+    iterator = iter_suite(
+        suite, seed, n_values=n_values, k_values=k_values,
+        length_factor=length_factor, phase_factor=phase_factor,
+        paper_protocol=paper_protocol, phase_length=phase_length
+    )
+    cases = list(tqdm(iterator, total=total_traces, desc="Generating Traces", unit="trace"))
+
+    records = []
+    with ProcessPoolExecutor() as executor:
+        futures = [executor.submit(write_trace, case, out_dir) for case in cases]
+        for future in tqdm(as_completed(futures), total=len(futures), desc="Writing Traces", unit="trace"):
+            records.append(future.result())
+
+    records.sort(key=lambda r: r["trace_id"])
+
     with manifest_path.open("w", encoding="utf-8", newline="\n") as manifest:
-        iterator = iter_suite(
-            suite, seed, n_values=n_values, k_values=k_values,
-            length_factor=length_factor, phase_factor=phase_factor,
-            paper_protocol=paper_protocol, phase_length=phase_length
-        )
-        for case in tqdm(iterator, total=total_traces, desc="Generating Traces", unit="trace"):
-            record = write_trace(case, out_dir)
+        for record in records:
             manifest.write(json.dumps(record, sort_keys=True) + "\n")
             count += 1
 

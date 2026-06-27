@@ -1,4 +1,5 @@
 """Plot publication-grade MIT paper replication figures from benchmark manifest."""
+import argparse
 import json
 import re
 from pathlib import Path
@@ -200,12 +201,19 @@ def plot_crossover_zoom(df: pd.DataFrame, out_dir: Path):
     plt.close()
 
 
-def generate_paper_plots():
-    out_dir = Path("data/analysis/plots/paper_replication")
+def generate_paper_plots(results_dir: Path = Path("data/results/paper_replication"), base_out: Path = Path("data/analysis")):
+    if base_out.name in ("paper_replication", "plots"):
+        root_out = base_out.parent
+    else:
+        root_out = base_out
+    out_dir = root_out / "plots" / "paper_replication"
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    df = load_results_manifest()
-    print(f"Loaded {len(df)} total benchmark manifest entries.")
+    if not (results_dir / "results_manifest.jsonl").exists() and (Path("data/results") / "results_manifest.jsonl").exists():
+        results_dir = Path("data/results")
+
+    df = load_results_manifest(results_dir)
+    print(f"Loaded {len(df)} total benchmark manifest entries from {results_dir}.")
 
     plot_sequential_suite(df, out_dir)
     plot_random_suite(df, out_dir)
@@ -215,4 +223,8 @@ def generate_paper_plots():
 
 
 if __name__ == "__main__":
-    generate_paper_plots()
+    parser = argparse.ArgumentParser(description="Plot paper replication comparisons.")
+    parser.add_argument("--results", default="data/results/paper_replication", help="Path to results directory")
+    parser.add_argument("--out", default="data/analysis", help="Path to analysis output directory")
+    args = parser.parse_args()
+    generate_paper_plots(Path(args.results), Path(args.out))

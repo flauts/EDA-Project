@@ -1,5 +1,6 @@
 """Generate clean asymptotic complexity traces matching MIT reference paper."""
 import json
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
 from tqdm import tqdm
 
@@ -47,10 +48,11 @@ def generate_paper_traces(out_dir: Path = Path("data/traces"), seed: int = 2026)
         )
 
     new_count = 0
-    for case in tqdm(cases, desc="Generating Paper Workloads", unit="trace"):
-        full_tid = f"paper_replication/{case.trace_id}"
-        if full_tid not in existing_records and case.trace_id not in existing_records:
-            record = write_trace(case, out_dir, category="paper_replication")
+    pending_cases = [c for c in cases if f"paper_replication/{c.trace_id}" not in existing_records and c.trace_id not in existing_records]
+    with ProcessPoolExecutor() as pool:
+        futures = [pool.submit(write_trace, case, out_dir, "paper_replication") for case in pending_cases]
+        for f in tqdm(as_completed(futures), total=len(futures), desc="Writing Paper Workloads", unit="trace"):
+            record = f.result()
             existing_records[record["trace_id"]] = record
             new_count += 1
 

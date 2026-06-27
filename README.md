@@ -79,45 +79,59 @@ Los arboles autoajustables aprovechan las propiedades S, W y F para reorganizars
   - `ftp://ita.ee.lbl.gov/traces/NASA_access_log_Jul95.gz`
   - `ftp://ita.ee.lbl.gov/traces/NASA_access_log_Aug95.gz`
 
+<!-- ## Optimizaciones de Alto Rendimiento (Multicore & I/O)
+
+El framework ha sido diseñado para ejecutar simulaciones masivas en paralelo aprovechando al máximo la arquitectura multicore del sistema:
+
+- **Generación Paralela de Trazas (`ProcessPoolExecutor`):** La creación de cientos de trazas sintéticas (`generate_traces.py` y `generate_paper_traces.py`) se distribuye automáticamente entre los núcleos de CPU disponibles, logrando aceleraciones de **>3x**.
+- **Orquestación Multicore del Benchmark (`run_benchmarks.py`):** En lugar de ejecutar simulaciones en serie, el orquestador spawnea procesos independientes sobre `benchmark.exe` dividiendo la carga de trabajo de manera conservadora (`cpu_count() - 1`). Evita condiciones de carrera en I/O utilizando archivos temporales con el flag `--manifest-suffix`, los cuales se fusionan automáticamente al finalizar, logrando aceleraciones de **>20x**.
+- **Modo Compacto sin I/O Pesado (`--compact`):** Para exploraciones asintóticas masivas donde no se requieren gráficos de costo por acceso (como en *Paper Replication*), el flag `--compact` suprime la escritura de archivos CSV gigantes en el motor C++, reduciendo los tiempos de ejecución de minutos a segundos.
+- **Optimización de Caché en C++:** El cálculo de la cota $IB_1$ en `benchmark.cpp` utiliza un acceso plano a memoria (`std::vector<int8_t>` 1-indexed) que garantiza localidad espacial y $O(1)$ en búsqueda.
+- **Análisis Ultra-Rápido en Python:** Los scripts de gráficos (`analyze.py` y `analyze_real_world.py`) implementan carga en memoria con el motor compilado en C (`engine="c"`) y sistemas de caché de DataFrames, reduciendo el tiempo de generación de figuras de minutos a segundos. -->
+
 ## Estructura del Proyecto
 
 ```
 EDA-Project/
 ├── src/
-│   ├── benchmark.cpp           # Driver del benchmark
-│   ├── trees_test.cpp          # Suite de tests de correctitud
+│   ├── benchmark.cpp            # Driver del benchmark C++
+│   ├── trees_test.cpp           # Suite de tests de correctitud unitarios
 │   └── trees/
-│       ├── bst.hpp             # Template base de BST
-│       ├── splaycount.hpp      # Splay Tree con contador de ops
-│       ├── tangocount.hpp      # Tango Tree con contador de ops
-│       ├── multisplaycount.hpp # Multi-Splay Tree con contador de ops
-│       └── rbtreecount.hpp     # Red-Black Tree (baseline)
+│       ├── bst.hpp              # Template base de BST
+│       ├── splaycount.hpp       # Splay Tree con contador de ops
+│       ├── tangocount.hpp       # Tango Tree con contador de ops
+│       ├── multisplaycount.hpp  # Multi-Splay Tree con contador de ops
+│       └── rbtreecount.hpp      # Red-Black Tree (baseline)
 │
 ├── tools/
-│   ├── generate_traces.py      # Generador de trazas (state transitions + paper)
-│   ├── generate_paper_traces.py # Generador para replicacion del paper
-│   ├── convert_nasa_logs.py    # Conversor de logs NASA HTTP
-│   ├── analyze.py              # Analisis y graficos de state transitions
-│   ├── analyze_real_world.py   # Analisis de workloads reales
-│   └── plot_paper_comparisons.py # Graficos de replicacion del paper
+│   ├── run_benchmarks.py        # Orquestador multicore para ejecución masiva en paralelo
+│   ├── generate_traces.py       # Generador de trazas en paralelo (state transitions)
+│   ├── generate_paper_traces.py # Generador en paralelo para replicación del paper
+│   ├── convert_nasa_logs.py     # Conversor de logs NASA HTTP
+│   ├── analyze.py               # Análisis normalizado y gráficos de state transitions
+│   ├── analyze_real_world.py    # Análisis normalizado de workloads reales
+│   └── plot_paper_comparisons.py# Gráficos normalizados de replicación del paper
 │
 ├── tests/
-│   └── test_generate_traces.py # Tests unitarios del generador
+│   └── test_generate_traces.py  # Tests unitarios del generador
 │
 ├── data/
-│   ├── traces/                 # Trazas de entrada
+│   ├── traces/                  # Trazas de entrada generadas
 │   │   ├── state_transitions/
 │   │   ├── paper_replication/
 │   │   └── real_world/
-│   ├── results/                # Resultados del benchmark (CSVs)
+│   ├── results/                 # Resultados de los benchmarks
 │   │   ├── results_manifest.jsonl
 │   │   ├── state_transitions/
 │   │   ├── paper_replication/
-│   │   ├── nasa_http_jul95/
-│   │   └── nasa_http_aug95/
-│   └── analysis/               # Graficos y resumen
-│       ├── summary.csv
+│   │   └── real_world/
+│   └── analysis/                # Salida normalizada de análisis y reportes
+│       ├── README.md
+│       ├── summary_state_transitions.csv
 │       └── plots/
+│           ├── state_transitions/   # 21 figuras de transiciones y adaptación
+│           ├── paper_replication/   # 4 figuras de escalamiento asintótico (Figs 3-6)
+│           └── real_world/          # 5 figuras de evaluación de servidores NASA
 │
 ├── CMakeLists.txt
 └── README.md
@@ -127,12 +141,13 @@ EDA-Project/
 
 | Herramienta | Descripcion |
 |------------|-------------|
-| `generate_traces.py` | Genera trazas reproducibles con patrones S/W/F/R. Soporta `--suite quick` (validacion) y `--suite full` (experimento formal) |
-| `generate_paper_traces.py` | Genera trazas para replicar los resultados del paper de referencia |
-| `convert_nasa_logs.py` | Convierte logs HTTP del NASA (formato CLF) a trazas enteras con hashing de URLs |
-| `analyze.py` | Lee los resultados del benchmark y genera graficos de adaptacion, recovery, y heatmaps |
-| `analyze_real_world.py` | Genera graficos especializados para trazas reales (curvas de costo, comparacion de ops) |
-| `plot_paper_comparisons.py` | Genera figuras de nivel publicacion para la replicacion del paper |
+| `run_benchmarks.py` | Orquestador multicore que distribuye la ejecución del binario C++ entre los núcleos del sistema en paralelo, gestionando la concurrencia y la consolidación de manifiestos |
+| `generate_traces.py` | Genera trazas reproducibles en paralelo con patrones S/W/F/R. Soporta `--suite quick` (validación) y `--suite full` (experimento formal) |
+| `generate_paper_traces.py` | Genera trazas asintóticas en paralelo para replicar los resultados del paper de referencia |
+| `convert_nasa_logs.py` | Convierte logs HTTP de la NASA (formato CLF) a trazas enteras con hashing de URLs |
+| `analyze.py` | Lee resultados del benchmark y genera gráficos normalizados de adaptación, recovery y heatmaps en `data/analysis/plots/state_transitions/` |
+| `analyze_real_world.py` | Genera gráficos normalizados para trazas reales en `data/analysis/plots/real_world/` |
+| `plot_paper_comparisons.py` | Genera figuras de nivel publicación para el paper en `data/analysis/plots/paper_replication/` |
 
 ## Salida del Benchmark
 
@@ -172,48 +187,54 @@ Archivo maestro con un JSON por linea por cada (traza, arbol):
 
 ## Pipeline Completo
 
+### 1. Track Principal: State Transitions (Adaptación Dinámica)
+
 ```powershell
-# 1. Generar trazas (quick para validacion, full para experimento formal)
-python tools/generate_traces.py --suite full --out data/traces --seed 2026
+# 1. Generar trazas sintéticas en paralelo (quick para validación, full para experimento formal)
+python tools/generate_traces.py --suite full --out data/traces/state_transitions --seed 2026
 
-# 2. Compilar
+# 2. Compilar binarios C++ optimizados
 cmake -B build
-cmake --build build
+cmake --build build --config Release
 
-# 3. Validar correctitud
+# 3. Validar integridad y correctitud estructural
 .\build\trees_test.exe
 
-# 4. Benchmark
-.\build\benchmark.exe --traces data/traces --out data/results --trees splay,tango,multisplay
+# 4. Ejecutar simulaciones masivas en paralelo (multicore)
+python tools/run_benchmarks.py --traces data/traces/state_transitions --out data/results/state_transitions --exe build/benchmark.exe
 
-# 5. Analisis
-python tools/analyze.py --results data/results --out data/analysis --traces data/traces
+# 5. Generar reportes CSV y figuras normalizadas
+python tools/analyze.py --results data/results/state_transitions --out data/analysis --traces data/traces/state_transitions
 ```
 
-Para el experimento formal con n grande, usa `--suite full` en el paso 1.
-
-### Paper Replication
+### 2. Track Asintótico: Replicación del Paper MIT
 
 ```powershell
+# 1. Generar trazas de escalamiento asintótico en paralelo (hasta n=1,048,576)
 python tools/generate_paper_traces.py
-python tools/plot_paper_comparisons.py
+
+# 2. Ejecutar benchmark asintótico en paralelo en modo ultra-rápido compacto (--compact)
+python tools/run_benchmarks.py --traces data/traces/paper_replication --out data/results/paper_replication --compact
+
+# 3. Generar figuras de replicación de publicación (Figuras 3, 4, 5 y 6)
+python tools/plot_paper_comparisons.py --results data/results/paper_replication --out data/analysis
 ```
 
-### Real-World Workloads (NASA HTTP Logs)
+### 3. Track Real-World: Servidores NASA HTTP Logs
 
 ```powershell
-# 1. Descargar logs manualmente
+# 1. Descargar logs manualmente desde los espejos oficiales
 #    ftp://ita.ee.lbl.gov/traces/NASA_access_log_Jul95.gz
 #    ftp://ita.ee.lbl.gov/traces/NASA_access_log_Aug95.gz
 
-# 2. Convertir y generar trazas
+# 2. Convertir logs al formato de trazas del framework
 python tools/convert_nasa_logs.py --log-dir <directorio_descarga> --out-dir data/traces
 
-# 3. Benchmark
-.\build\benchmark.exe --traces data/traces/real_world --out data/results --trees splay,tango,multisplay
+# 3. Ejecutar benchmark masivo sobre las 3.4M operaciones en paralelo
+python tools/run_benchmarks.py --traces data/traces/real_world --out data/results/real_world --exe build/benchmark.exe
 
-# 4. Analisis
-python tools/analyze_real_world.py --results data/results --out data/analysis
+# 4. Generar curvas de costo real y distribuciones de operaciones
+python tools/analyze_real_world.py --results data/results/real_world --out data/analysis
 ```
 
 ## Referencias

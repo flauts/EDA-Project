@@ -52,12 +52,18 @@ def _load_manifest(results_dir: Path) -> pd.DataFrame:
     return pd.DataFrame(records)
 
 
+_csv_cache = {}
+
+
 def _read_tree_csv(csv_path: Path) -> pd.DataFrame:
-    return pd.read_csv(
-        csv_path, comment="#",
-        dtype={"access_index": "int64", "key": "int64", "phase_id": "int64",
-               "phase_name": "string", "ops": "float64", "cum_ops": "float64"},
-        engine="python")
+    key = str(csv_path)
+    if key not in _csv_cache:
+        _csv_cache[key] = pd.read_csv(
+            csv_path, comment="#",
+            dtype={"access_index": "int64", "key": "int64", "phase_id": "int64",
+                   "phase_name": "string", "ops": "float64", "cum_ops": "float64"},
+            engine="c")
+    return _csv_cache[key]
 
 
 def _load_trace_meta(traces_dir: Path, trace_id: str) -> dict:
@@ -270,8 +276,12 @@ def main(argv: list[str] | None = None) -> int:
     out_dir = Path(args.out)
     traces_dir = Path(args.traces)
 
-    out_dir.mkdir(parents=True, exist_ok=True)
-    plots_dir = out_dir / "plots"
+    if out_dir.name in ("state_transitions", "plots"):
+        root_out_dir = out_dir.parent
+    else:
+        root_out_dir = out_dir
+    root_out_dir.mkdir(parents=True, exist_ok=True)
+    plots_dir = root_out_dir / "plots"
     plots_dir.mkdir(parents=True, exist_ok=True)
 
     manifest_path = results_dir / "results_manifest.jsonl"
@@ -395,11 +405,11 @@ def main(argv: list[str] | None = None) -> int:
 
     if not rows:
         print("No data rows produced.")
-        _write_readme(out_dir)
+        _write_readme(root_out_dir)
         return 1
 
     summary = pd.DataFrame(rows)
-    csv_out = out_dir / "summary.csv"
+    csv_out = root_out_dir / "summary_state_transitions.csv"
     summary.to_csv(csv_out, index=False, float_format="%.6g")
     print(f"Wrote {len(summary)} rows to {csv_out}")
 
@@ -413,7 +423,7 @@ def main(argv: list[str] | None = None) -> int:
     _plot_cost_curves(summary, results_dir, traces_dir, trans_plots_dir)
     print(f"Plots written to {plots_dir}")
 
-    _write_readme(out_dir)
+    _write_readme(root_out_dir)
     return 0
 
 
