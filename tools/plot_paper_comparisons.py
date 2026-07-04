@@ -61,37 +61,29 @@ def plot_sequential_suite(df: pd.DataFrame, out_dir: Path):
 
     trees = [t for t in ["splay", "multisplay", "tango", "rbtree"] if t in seq_df["tree"].unique()]
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6), dpi=300)
+    fig, ax1 = plt.subplots(1, 1, figsize=(7, 6), dpi=300)
 
     for tree in trees:
         tdf = seq_df[seq_df["tree"] == tree].sort_values("n")
         x = tdf["lglgn"].values
         y_cost = tdf["avg_ops_per_access"].values
-        y_ratio = tdf["ratio_ops_ib1"].values
 
         c = TREE_COLORS.get(tree, "#333333")
         lbl = TREE_LABELS.get(tree, tree)
         m = TREE_MARKERS.get(tree, "o")
 
         ax1.plot(x, y_cost, label=lbl, color=c, marker=m, linewidth=2, markersize=6)
-        ax2.plot(x, y_ratio, label=lbl, color=c, marker=m, linewidth=2, markersize=6)
 
         if tree == "tango" and len(x) > 2:
             res = stats.linregress(x, y_cost)
             ax1.plot(x, res.intercept + res.slope * x, "--", color=c, alpha=0.6,
                      label=f"Tango Fit ($R^2={res.rvalue**2:.3f}$)")
 
-    ax1.set_title("Sequential Workload: Amortized Search Cost (Fig. 3a)", fontsize=13, pad=10)
+    ax1.set_title("Sequential: Amortized Search Cost", fontsize=13, pad=10)
     ax1.set_xlabel(r"$\log_2(\log_2 n)$", fontsize=12)
     ax1.set_ylabel("Operations / Access", fontsize=12)
     ax1.grid(True, linestyle="--", alpha=0.6)
     ax1.legend(frameon=True)
-
-    ax2.set_title("Sequential Workload: Competitiveness Ratio (Fig. 3b)", fontsize=13, pad=10)
-    ax2.set_xlabel(r"$\log_2(\log_2 n)$", fontsize=12)
-    ax2.set_ylabel("Total Operations / Wilber-1 Bound", fontsize=12)
-    ax2.grid(True, linestyle="--", alpha=0.6)
-    ax2.legend(frameon=True)
 
     plt.tight_layout()
     plt.savefig(out_dir / "fig3_sequential_scaling.png")

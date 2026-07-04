@@ -30,12 +30,12 @@ _K_RE = re.compile(r"_k(\d+)_")  # extract k from trace_id
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         description="Analyze M3 benchmark results — adaptation cost vs static baseline.")
-    p.add_argument("--results", type=Path, default=Path("data/results"),
-                   help="M3 results directory (default: data/results)")
+    p.add_argument("--results", type=Path, default=Path("data/results/state_transitions"),
+                   help="M3 results directory (default: data/results/state_transitions)")
     p.add_argument("--out", type=Path, default=Path("data/analysis"),
                    help="Output directory (default: data/analysis)")
-    p.add_argument("--traces", type=Path, default=Path("data/traces"),
-                   help="M1 traces directory (default: data/traces)")
+    p.add_argument("--traces", type=Path, default=Path("data/traces/state_transitions"),
+                   help="M1 traces directory (default: data/traces/state_transitions)")
     return p
 
 
@@ -128,12 +128,8 @@ def _phase_stats(df: pd.DataFrame, phase_id: int, L: int) -> tuple[float, float]
 
 # -- Grouped-bar helper (reused by cost bars and recovery bars) -----------------
 
-def _plot_grouped_bars(pivot: pd.DataFrame, ylabel: str, title: str,
-                       fname: Path) -> None:
+def _draw_grouped_bars_on_ax(ax, pivot: pd.DataFrame, ylabel: str) -> None:
     n_items, n_trees = len(pivot), len(pivot.columns)
-    if n_items == 0 or n_trees == 0:
-        return
-    fig, ax = plt.subplots(figsize=(max(6, n_items * 1.2), 4))
     x = np.arange(n_items)
     width = 0.8 / n_trees
     for i, tree in enumerate(pivot.columns):
@@ -141,9 +137,18 @@ def _plot_grouped_bars(pivot: pd.DataFrame, ylabel: str, title: str,
     ax.set_xticks(x)
     ax.set_xticklabels(pivot.index, rotation=30, ha="right", fontsize="small")
     ax.set_ylabel(ylabel)
-    ax.set_title(title)
     ax.axhline(y=0, color="gray", linewidth=0.5)
     ax.legend(fontsize="small")
+
+
+def _plot_grouped_bars(pivot: pd.DataFrame, ylabel: str, title: str,
+                       fname: Path) -> None:
+    n_items, n_trees = len(pivot), len(pivot.columns)
+    if n_items == 0 or n_trees == 0:
+        return
+    fig, ax = plt.subplots(figsize=(max(6, n_items * 1.2), 4))
+    _draw_grouped_bars_on_ax(ax, pivot, ylabel)
+    ax.set_title(title)
     fig.tight_layout()
     fig.savefig(fname, dpi=150)
     plt.close(fig)
@@ -203,26 +208,32 @@ def _plot_cost_bars(summary: pd.DataFrame, plots_dir: Path) -> None:
                            plots_dir / f"adaptation_cost_bars_{n}.png")
 
 
-def _plot_recovery_cost_bars(summary: pd.DataFrame, plots_dir: Path) -> None:
-    triples = summary[(summary["transition_type"] == "triple") & (summary["p1"] == summary["p3"])].copy()
+def _plot_triple_cost_bars(summary: pd.DataFrame, plots_dir: Path) -> None:
+    triples = summary[summary["transition_type"] == "triple"].copy()
     if triples.empty:
         return
     triples["triple_label"] = triples["p1"] + "\u2192" + triples["p2"] + "\u2192" + triples["p3"]
-    grouped = triples.groupby(["triple_label", "tree"], as_index=False)["recovery_cost"].mean()
-    pivot = grouped.pivot(index="triple_label", columns="tree", values="recovery_cost").sort_index()
-    _plot_grouped_bars(pivot, "Recovery cost", "Recovery cost for return triples",
-                       plots_dir / "recovery_cost_bars.png")
 
+    ret = triples[triples["p1"] == triples["p3"]]
+    chain = triples[triples["p1"] != triples["p3"]]
 
-def _plot_chain_cost_bars(summary: pd.DataFrame, plots_dir: Path) -> None:
-    triples = summary[(summary["transition_type"] == "triple") & (summary["p1"] != summary["p3"])].copy()
-    if triples.empty:
-        return
-    triples["triple_label"] = triples["p1"] + "\u2192" + triples["p2"] + "\u2192" + triples["p3"]
-    grouped = triples.groupby(["triple_label", "tree"], as_index=False)["recovery_cost"].mean()
-    pivot = grouped.pivot(index="triple_label", columns="tree", values="recovery_cost").sort_index()
-    _plot_grouped_bars(pivot, "Chain transition cost", "Transition cost for chain triples",
-                       plots_dir / "chain_cost_bars.png")
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5), dpi=150)
+
+    if not ret.empty:
+        g_ret = ret.groupby(["triple_label", "tree"], as_index=False)["recovery_cost"].mean()
+        p_ret = g_ret.pivot(index="triple_label", columns="tree", values="recovery_cost").sort_index()
+        _draw_grouped_bars_on_ax(ax1, p_ret, "Recovery cost")
+        ax1.set_title("(a) Return triples ($A \\to B \\to A$)", fontsize=12)
+
+    if not chain.empty:
+        g_chain = chain.groupby(["triple_label", "tree"], as_index=False)["recovery_cost"].mean()
+        p_chain = g_chain.pivot(index="triple_label", columns="tree", values="recovery_cost").sort_index()
+        _draw_grouped_bars_on_ax(ax2, p_chain, "Net accumulated cost")
+        ax2.set_title("(b) Chain triples ($A \\to B \\to C$)", fontsize=12)
+
+    fig.tight_layout()
+    fig.savefig(plots_dir / "triple_cost_bars.png", dpi=150)
+    plt.close(fig)
 
 
 def _plot_cost_curves(summary: pd.DataFrame, results_dir: Path,
@@ -418,8 +429,7 @@ def main(argv: list[str] | None = None) -> int:
     trans_plots_dir.mkdir(parents=True, exist_ok=True)
     _plot_heatmaps(summary, trans_plots_dir)
     _plot_cost_bars(summary, trans_plots_dir)
-    _plot_recovery_cost_bars(summary, trans_plots_dir)
-    _plot_chain_cost_bars(summary, trans_plots_dir)
+    _plot_triple_cost_bars(summary, trans_plots_dir)
     _plot_cost_curves(summary, results_dir, traces_dir, trans_plots_dir)
     print(f"Plots written to {plots_dir}")
 
