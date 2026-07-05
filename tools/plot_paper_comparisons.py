@@ -136,32 +136,24 @@ def plot_working_set_suite(df: pd.DataFrame, out_dir: Path):
 
     trees = [t for t in ["splay", "multisplay", "tango", "rbtree"] if t in ws_df["tree"].unique()]
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6), dpi=300)
+    fig, ax1 = plt.subplots(1, 1, figsize=(7, 6), dpi=300)
 
     for tree in trees:
         tdf = ws_df[ws_df["tree"] == tree].sort_values("k")
         x = tdf["lgk"].values
         y_cost = tdf["avg_ops_per_access"].values
-        y_ratio = tdf["ratio_ops_ib1"].values
 
         c = TREE_COLORS.get(tree, "#333333")
         lbl = TREE_LABELS.get(tree, tree)
         m = TREE_MARKERS.get(tree, "o")
 
         ax1.plot(x, y_cost, label=lbl, color=c, marker=m, linewidth=2, markersize=6)
-        ax2.plot(x, y_ratio, label=lbl, color=c, marker=m, linewidth=2, markersize=6)
 
-    ax1.set_title("Working Set Scaling: Amortized Search Cost (Fig. 5-9a)", fontsize=13, pad=10)
+    ax1.set_title("Working Set Scaling: Amortized Search Cost", fontsize=13, pad=10)
     ax1.set_xlabel(r"$\log_2 k$ (Working Set Size)", fontsize=12)
     ax1.set_ylabel("Operations / Access", fontsize=12)
     ax1.grid(True, linestyle="--", alpha=0.6)
     ax1.legend(frameon=True)
-
-    ax2.set_title("Working Set Scaling: Competitiveness Ratio (Fig. 5-9b)", fontsize=13, pad=10)
-    ax2.set_xlabel(r"$\log_2 k$ (Working Set Size)", fontsize=12)
-    ax2.set_ylabel("Total Operations / Wilber-1 Bound", fontsize=12)
-    ax2.grid(True, linestyle="--", alpha=0.6)
-    ax2.legend(frameon=True)
 
     plt.tight_layout()
     plt.savefig(out_dir / "fig5_working_set_scaling.png")
