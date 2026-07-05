@@ -27,12 +27,11 @@ def _extract_url(line: str) -> str | None:
 
 
 def convert(log_path: Path, out_dir: Path, trace_id: str, category: str = "real_world") -> dict:
-    """Parse CLF log, hash URL paths to integer keys, write trace.txt + trace.json."""
+    """Parse CLF log, map URL paths to integer keys (alphabetically sorted), write trace.txt + trace.json."""
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    url_to_key: dict[str, int] = {}
-    next_key = 1
-    accesses: list[int] = []
+    url_order: list[str] = []
+    unique_urls: set[str] = set()
 
     opener = gzip.open if log_path.suffix == ".gz" else open
     with opener(log_path, "rt", encoding="utf-8", errors="replace") as f:
@@ -40,14 +39,14 @@ def convert(log_path: Path, out_dir: Path, trace_id: str, category: str = "real_
             url = _extract_url(line)
             if url is None:
                 continue
-            key = url_to_key.get(url)
-            if key is None:
-                key = next_key
-                url_to_key[url] = key
-                next_key += 1
-            accesses.append(key)
+            url_order.append(url)
+            unique_urls.add(url)
 
-    n = next_key - 1
+    sorted_urls = sorted(unique_urls)
+    url_to_key: dict[str, int] = {url: i + 1 for i, url in enumerate(sorted_urls)}
+    accesses = [url_to_key[url] for url in url_order]
+
+    n = len(sorted_urls)
     m = len(accesses)
 
     # Write trace.txt

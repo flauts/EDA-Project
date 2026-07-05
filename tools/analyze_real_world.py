@@ -58,6 +58,7 @@ def plot_cost_curves(manifest: pd.DataFrame, out_dir: Path):
         trace_name = trace_id.split("/")[-1] if "/" in trace_id else trace_id
         fig, ax = plt.subplots(figsize=(12, 5), dpi=150)
         window = 10000  # default
+        skip = 10000 if trace_name.startswith("nasa") else 0
 
         for _, row in tdf.iterrows():
             csv_path = Path(row["csv_path"])
@@ -67,9 +68,12 @@ def plot_cost_curves(manifest: pd.DataFrame, out_dir: Path):
             df = _read_csv(csv_path)
             window = min(10000, len(df) // 20)
             rolling = df["ops"].rolling(window=window, min_periods=1).mean()
-            # ponytail: subsample for plotting
-            idx = df["access_index"].values[::step]
-            rv = rolling.values[::step]
+            # ponytail: subsample for plotting after skip offset
+            idx = df["access_index"].values[skip::step]
+            rv = rolling.values[skip::step]
+
+            if len(idx) == 0:
+                continue
 
             ax.plot(
                 idx, rv,

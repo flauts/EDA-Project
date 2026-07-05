@@ -196,20 +196,22 @@ def _plot_heatmaps(summary: pd.DataFrame, plots_dir: Path) -> None:
 
 
 def _plot_cost_bars(summary: pd.DataFrame, plots_dir: Path) -> None:
+    k_filter = 64
     for n in sorted(summary["n"].unique()):
-        data = summary[summary["n"] == n].copy()
+        data = summary[(summary["n"] == n) & (summary["k"] == k_filter)].copy()
         if data.empty:
             continue
         data["pair"] = data["p1"] + "\u2192" + data["p2"]
         grouped = data.groupby(["pair", "tree"], as_index=False)["adaptation_cost_p2"].mean()
         pivot = grouped.pivot(index="pair", columns="tree", values="adaptation_cost_p2").sort_index()
         _plot_grouped_bars(pivot, "Adaptation cost",
-                           f"Adaptation cost by transition pair (n={n})",
-                           plots_dir / f"adaptation_cost_bars_{n}.png")
+                           f"Adaptation cost by transition pair (n={n}, k={k_filter})",
+                           plots_dir / f"adaptation_cost_bars_{n}_k{k_filter}.png")
 
 
 def _plot_triple_cost_bars(summary: pd.DataFrame, plots_dir: Path) -> None:
-    triples = summary[summary["transition_type"] == "triple"].copy()
+    k_filter = 64
+    triples = summary[(summary["transition_type"] == "triple") & (summary["k"] == k_filter)].copy()
     if triples.empty:
         return
     triples["triple_label"] = triples["p1"] + "\u2192" + triples["p2"] + "\u2192" + triples["p3"]
