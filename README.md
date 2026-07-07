@@ -6,9 +6,9 @@ Framework de evaluacion para comparar el comportamiento dinamico de Splay Trees,
 
 Los arboles autoajustables (Splay, Tango, Multi-Splay) tienen complejidad asintotica competitiva, pero su rendimiento real depende de como se adaptan a **cambios en el patron de acceso**. Este proyecto evalua:
 
-- **Costo de adaptacion:** penalidad cuando el patron cambia de una fase a otra
-- **Memoria estructural:** si el arbol recuerda la estructura previa al volver a un patron visto antes
-- **Rendimiento comparativo:** costo amortizado por acceso y costo total de operaciones
+- **Costo de adaptacion:** penalidad cuando el patron cambia de una fase a otra.
+- **Memoria estructural:** si el arbol recuerda la estructura previa al volver a un patron visto antes.
+- **Rendimiento comparativo:** costo amortizado por acceso y costo total de operaciones.
 
 ## Estructuras Evaluadas
 
