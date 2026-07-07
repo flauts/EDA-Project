@@ -13,8 +13,9 @@ from generate_traces import (
 
 
 def generate_paper_traces(out_dir: Path = Path("data/traces"), seed: int = 2026):
-    out_dir.mkdir(parents=True, exist_ok=True)
-    manifest_path = out_dir / "manifest.jsonl"
+    paper_dir = out_dir / "paper_replication"
+    paper_dir.mkdir(parents=True, exist_ok=True)
+    manifest_path = paper_dir / "manifest.jsonl"
 
     existing_records = {}
     if manifest_path.exists():
@@ -48,9 +49,9 @@ def generate_paper_traces(out_dir: Path = Path("data/traces"), seed: int = 2026)
         )
 
     new_count = 0
-    pending_cases = [c for c in cases if f"paper_replication/{c.trace_id}" not in existing_records and c.trace_id not in existing_records]
+    pending_cases = [c for c in cases if c.trace_id not in existing_records]
     with ProcessPoolExecutor() as pool:
-        futures = [pool.submit(write_trace, case, out_dir, "paper_replication") for case in pending_cases]
+        futures = [pool.submit(write_trace, case, paper_dir) for case in pending_cases]
         for f in tqdm(as_completed(futures), total=len(futures), desc="Writing Paper Workloads", unit="trace"):
             record = f.result()
             existing_records[record["trace_id"]] = record

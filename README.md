@@ -8,15 +8,15 @@ Los arboles autoajustables (Splay, Tango, Multi-Splay) tienen complejidad asinto
 
 - **Costo de adaptacion:** penalidad cuando el patron cambia de una fase a otra
 - **Memoria estructural:** si el arbol recuerda la estructura previa al volver a un patron visto antes
-- **Competitividad real:** que tan cerca opera cada arbol de la cota teorica optima (IB-1)
+- **Rendimiento comparativo:** costo amortizado por acceso y costo total de operaciones
 
 ## Estructuras Evaluadas
 
 | Arbol | Tipo | Complejidad | Descripcion |
 |-------|------|-------------|-------------|
 | **Splay Tree** | Autoajustable | O(log n) amortizado | Clasico de Sleator y Tarjan. Reorganiza el arbol en cada acceso via operaciones de rotacion (zig, zig-zig, zig-zag). |
-| **Tango Tree** | Competitivo | O(log log n)-competitivo vs IB-1 | Implementa el algoritmo de Demaine et al. Usa arboles rojo-negro auxiliares por camino preferido. |
-| **Multi-Splay Tree** | Competitivo | O(log log n)-competitivo vs IB-1 | Variante de Busa et al. Usa arboles splay auxiliares con direccion de switch (izquierda-derecha). |
+| **Tango Tree** | Competitivo | O(log log n)-competitivo | Implementa el algoritmo de Demaine et al. Usa arboles rojo-negro auxiliares por camino preferido. |
+| **Multi-Splay Tree** | Competitivo | O(log log n)-competitivo | Variante de Busa et al. Usa arboles splay auxiliares con direccion de switch (izquierda-derecha). |
 | **Red-Black Tree** | Estatico | O(log n) por operacion | Baseline sin reorganizacion por acceso. Solo rotaciones durante insercion. |
 
 ## Patron de Acceso: Propiedades S, W, F, R
@@ -37,10 +37,9 @@ Los arboles autoajustables aprovechan las propiedades S, W y F para reorganizars
 | Metrica | Descripcion |
 |---------|-------------|
 | **ops_total** | Total de operaciones (travesias de puntero + rotaciones) en toda la traza |
-| **Cota IB-1** | Lower bound teorico de Wilber. Numero minimo de cambios de direccion que cualquier BST debe hacer |
-| **Ratio ops/IB-1** | `ops_total / interleave_bound`. Que tan cerca del optimo opera cada arbol. Un valor cercano a 1.0 indica operacion casi optima |
+| **avg_ops_per_access** | Costo amortizado por acceso. Promedio de operaciones elementales por busqueda |
 | **Costo de Adaptacion** | Diferencia entre el costo promedio por acceso en la fase 2 (patron nuevo) y el baseline estatico para ese mismo patron |
-| **Costo de Recuperacion** | Diferencia entre el costo en la fase 3 (retorno al patron original) y la fase 1. Valores bajos indican que el arbol recuerdo su estructura previa |
+| **Costo de Recuperacion** | Diferencia entre el costo en la fase 3 (retorno al patron original) y la fase 1. Valores bajos indican que el arbol recuerda su estructura previa |
 
 ## Tres Pistas Experimentales
 
@@ -48,9 +47,9 @@ Los arboles autoajustables aprovechan las propiedades S, W y F para reorganizars
 
 **Objetivo:** Medir como los BSTs se adaptan a cambios de patron de acceso.
 
-- **Traces:** 8 pares simples (S->W, S->F, W->S, etc.) para latency de adaptacion + 6 triples de retorno (A->B->A) para memoria estructural + 1 cadena (S->W->F)
-- **Tamano:** n = 1023, 8191, 32767 conWorking Set k = 8, 64
-- **Generador:** `python tools/generate_traces.py --suite full --out data/traces`
+- **Traces:** 8 pares simples (S->W, S->F, W->S, etc.) para latencia de adaptacion + 6 triples de retorno (A->B->A) para memoria estructural + 6 triples de cadena (A->B->C, las 6 permutaciones de {S, W, F})
+- **Tamano:** n = 1023, 8191, 32767 con Working Set k = 8, 64
+- **Generador:** `python tools/generate_traces.py --suite full --out data/traces/state_transitions --seed 2026`
 - **Datos:** `data/traces/state_transitions/`
 - **Resultados:** `data/results/state_transitions/`
 - **Analisis:** `python tools/analyze.py --results data/results --out data/analysis --traces data/traces`
@@ -73,7 +72,7 @@ Los arboles autoajustables aprovechan las propiedades S, W y F para reorganizars
 - **Fases naturales:** patrones diurnos, lanzamiento de transbordador (STS-70), shutdown por huracan Erin
 - **Generador:** `python tools/convert_nasa_logs.py --log-dir <dir> --out-dir data/traces`
 - **Datos:** `data/traces/real_world/`
-- **Resultados:** `data/results/nasa_http_jul95/`, `data/results/nasa_http_aug95/`
+- **Resultados:** `data/results/real_world/nasa_http_jul95/`, `data/results/real_world/nasa_http_aug95/`
 - **Analisis:** `python tools/analyze_real_world.py --results data/results --out data/analysis`
 - **Descarga:**
   - `ftp://ita.ee.lbl.gov/traces/NASA_access_log_Jul95.gz`
@@ -86,7 +85,7 @@ El framework ha sido diseñado para ejecutar simulaciones masivas en paralelo ap
 - **Generación Paralela de Trazas (`ProcessPoolExecutor`):** La creación de cientos de trazas sintéticas (`generate_traces.py` y `generate_paper_traces.py`) se distribuye automáticamente entre los núcleos de CPU disponibles, logrando aceleraciones de **>3x**.
 - **Orquestación Multicore del Benchmark (`run_benchmarks.py`):** En lugar de ejecutar simulaciones en serie, el orquestador spawnea procesos independientes sobre `benchmark.exe` dividiendo la carga de trabajo de manera conservadora (`cpu_count() - 1`). Evita condiciones de carrera en I/O utilizando archivos temporales con el flag `--manifest-suffix`, los cuales se fusionan automáticamente al finalizar, logrando aceleraciones de **>20x**.
 - **Modo Compacto sin I/O Pesado (`--compact`):** Para exploraciones asintóticas masivas donde no se requieren gráficos de costo por acceso (como en *Paper Replication*), el flag `--compact` suprime la escritura de archivos CSV gigantes en el motor C++, reduciendo los tiempos de ejecución de minutos a segundos.
-- **Optimización de Caché en C++:** El cálculo de la cota $IB_1$ en `benchmark.cpp` utiliza un acceso plano a memoria (`std::vector<int8_t>` 1-indexed) que garantiza localidad espacial y $O(1)$ en búsqueda.
+- **Optimización de Caché en C++:** El cálculo del interleave bound en `benchmark.cpp` utiliza un acceso plano a memoria (`std::vector<int8_t>` 1-indexed) que garantiza localidad espacial y $O(1)$ en búsqueda.
 - **Análisis Ultra-Rápido en Python:** Los scripts de gráficos (`analyze.py` y `analyze_real_world.py`) implementan carga en memoria con el motor compilado en C (`engine="c"`) y sistemas de caché de DataFrames, reduciendo el tiempo de generación de figuras de minutos a segundos. -->
 
 ## Estructura del Proyecto
@@ -129,7 +128,7 @@ EDA-Project/
 │       ├── README.md
 │       ├── summary_state_transitions.csv
 │       └── plots/
-│           ├── state_transitions/   # 21 figuras de transiciones y adaptación
+│           ├── state_transitions/   # 25 figuras de transiciones y adaptación
 │           ├── paper_replication/   # 4 figuras de escalamiento asintótico (Figs 3-6)
 │           └── real_world/          # 5 figuras de evaluación de servidores NASA
 │
@@ -175,8 +174,6 @@ Archivo maestro con un JSON por linea por cada (traza, arbol):
  "tree":"splay",
  "csv_path":"state_transitions/transition_S_to_W_n1023_seed2026_k64_pl5115/splay.csv",
  "ops_total":87654,
- "interleave_bound":3456,
- "ratio_ops_ib1":2.53,
  "avg_ops_per_access":1.71}
 ```
 
@@ -185,7 +182,30 @@ Archivo maestro con un JSON por linea por cada (traza, arbol):
 - **C++20** + **CMake** (estructuras y benchmark)
 - **Python 3.10+** con `pandas`, `matplotlib`, `numpy`, `scipy`, `tqdm`
 
+## Setup
+
+### 1. Instalar dependencias Python
+```powershell
+pip install pandas matplotlib numpy scipy tqdm
+```
+
+### 2. Compilar binarios C++
+```powershell
+cmake -B build
+cmake --build build --config Release
+```
+
+### 3. Validar correctitud
+```powershell
+# Linux/Mac:
+./build/trees_test
+# Windows:
+.\build\trees_test.exe
+```
+
 ## Pipeline Completo
+
+> **Nota:** El directorio `data/` está en `.gitignore`. Debes generar las trazas y resultados localmente.
 
 ### 1. Track Principal: State Transitions (Adaptación Dinámica)
 
@@ -193,18 +213,11 @@ Archivo maestro con un JSON por linea por cada (traza, arbol):
 # 1. Generar trazas sintéticas en paralelo (quick para validación, full para experimento formal)
 python tools/generate_traces.py --suite full --out data/traces/state_transitions --seed 2026
 
-# 2. Compilar binarios C++ optimizados
-cmake -B build
-cmake --build build --config Release
-
-# 3. Validar integridad y correctitud estructural
-.\build\trees_test.exe
-
-# 4. Ejecutar simulaciones masivas en paralelo (multicore)
+# 2. Ejecutar simulaciones masivas en paralelo (multicore)
 python tools/run_benchmarks.py --traces data/traces/state_transitions --out data/results/state_transitions --exe build/benchmark.exe
 
-# 5. Generar reportes CSV y figuras normalizadas
-python tools/analyze.py --results data/results/state_transitions --out data/analysis --traces data/traces/state_transitions
+# 3. Generar reportes CSV y figuras normalizadas (usa defaults)
+python tools/analyze.py
 ```
 
 ### 2. Track Asintótico: Replicación del Paper MIT
@@ -213,8 +226,8 @@ python tools/analyze.py --results data/results/state_transitions --out data/anal
 # 1. Generar trazas de escalamiento asintótico en paralelo (hasta n=1,048,576)
 python tools/generate_paper_traces.py
 
-# 2. Ejecutar benchmark asintótico en paralelo en modo ultra-rápido compacto (--compact)
-python tools/run_benchmarks.py --traces data/traces/paper_replication --out data/results/paper_replication --compact
+# 2. Ejecutar benchmark en paralelo (--compact: omite CSVs gigantes para acelerar)
+python tools/run_benchmarks.py --traces data/traces/paper_replication --out data/results/paper_replication --exe build/benchmark.exe --compact
 
 # 3. Generar figuras de replicación de publicación (Figuras 3, 4, 5 y 6)
 python tools/plot_paper_comparisons.py --results data/results/paper_replication --out data/analysis
@@ -228,7 +241,8 @@ python tools/plot_paper_comparisons.py --results data/results/paper_replication 
 #    ftp://ita.ee.lbl.gov/traces/NASA_access_log_Aug95.gz
 
 # 2. Convertir logs al formato de trazas del framework
-python tools/convert_nasa_logs.py --log-dir <directorio_descarga> --out-dir data/traces
+#    Los archivos .gz deben estar en <path/to/downloads>
+python tools/convert_nasa_logs.py --log-dir <path/to/downloads> --out-dir data/traces
 
 # 3. Ejecutar benchmark masivo sobre las 3.4M operaciones en paralelo
 python tools/run_benchmarks.py --traces data/traces/real_world --out data/results/real_world --exe build/benchmark.exe
