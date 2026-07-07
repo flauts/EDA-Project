@@ -228,9 +228,9 @@ def _plot_triple_cost_bars(summary: pd.DataFrame, plots_dir: Path) -> None:
         ax1.set_title("(a) Return triples ($A \\to B \\to A$)", fontsize=12)
 
     if not chain.empty:
-        g_chain = chain.groupby(["triple_label", "tree"], as_index=False)["recovery_cost"].mean()
-        p_chain = g_chain.pivot(index="triple_label", columns="tree", values="recovery_cost").sort_index()
-        _draw_grouped_bars_on_ax(ax2, p_chain, "Net accumulated cost")
+        g_chain = chain.groupby(["triple_label", "tree"], as_index=False)["avg_ops_full_trace"].mean()
+        p_chain = g_chain.pivot(index="triple_label", columns="tree", values="avg_ops_full_trace").sort_index()
+        _draw_grouped_bars_on_ax(ax2, p_chain, "Avg ops/access (full trace)")
         ax2.set_title("(b) Chain triples ($A \\to B \\to C$)", fontsize=12)
 
     fig.tight_layout()
@@ -381,10 +381,14 @@ def main(argv: list[str] | None = None) -> int:
             mean_p1_t, total_p1 = _phase_stats(df, phase_order[0], phase_length)
 
             recovery_cost: float | str = ""
+            avg_ops_full_trace: float | str = ""
             total_p3: float | str = ""
             if p3 and len(phase_order) > 2:
                 mean_p3_t, total_p3 = _phase_stats(df, phase_order[2], phase_length)
                 recovery_cost = mean_p3_t - mean_p1_t
+                total_full = total_p1 + total_p2 + total_p3
+                total_len = phase_length * 3
+                avg_ops_full_trace = total_full / total_len if total_len > 0 else 0.0
 
             p2_entry = _baseline_entry(static_idx, p2_family, n_val, p2_k, tree)
             if not p2_entry:
@@ -410,6 +414,7 @@ def main(argv: list[str] | None = None) -> int:
                 "p1": p1, "p2": p2, "p3": p3, "phase_length": phase_length,
                 "adaptation_cost_p2": adaptation_cost_p2,
                 "recovery_cost": recovery_cost,
+                "avg_ops_full_trace": avg_ops_full_trace,
                 "ops_total_p1": int(total_p1), "ops_total_p2": int(total_p2),
                 "ops_total_p3": int(total_p3) if isinstance(total_p3, float) and not np.isnan(total_p3) else "",
                 "static_baseline_p2": static_mean_p2,
